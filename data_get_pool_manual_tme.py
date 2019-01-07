@@ -22,8 +22,9 @@ sys.setdefaultencoding('utf-8')
 def get_new_album_track(last_get_time,conn,cur,limit):
 	album_dict = {}
 	#last_get_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%m:%S")
-	sql = '''select * from CenterApi where ctime>"%s" order by sid limit %s''' % (last_get_time,limit)
-	#sql = '''select * from CenterApi where album_id=4809788''' % ()
+	#sql = '''select * from CenterApi where album_id in (4951470)'''
+	sql = '''select * from CenterApi where track_id in (219636677,219644093,219104794,219644522)'''
+	#sql = '''select * from CenterApi where ctif_scheduled_release_time in ("201811130000","201811131000","201811131100") limit %s''' % (limit)
 	cnt = cur.execute(sql)
 	if cnt > 0:
 		rets = cur.fetchall()
@@ -33,9 +34,78 @@ def get_new_album_track(last_get_time,conn,cur,limit):
 			else:
 				album_dict[ret["album_id"]] = {}
 				album_dict[ret["album_id"]][ret["track_id"]] = ret
+			#if album_dict.has_key(ret["album_id"]):
+			#	album_dict[ret["album_id"]].append(ret)
+			#else:
+			#	album_dict[ret["album_id"]] = []
+			#	album_dict[ret["album_id"]].append(ret)
+		conn.commit()
+	return album_dict
+
+def get_new_album_track_file(filename,conn,cur,limit):
+	f = open(filename,"r")
+	pro_set = set()
+	for line in f:
+		arr = line.strip().split("\t")
+		pro_set.add(arr[0])
+	f.close()
+
+	ids_str = ""
+	for id in pro_set:
+		ids_str += "%s," % (id)
+	
+	album_dict = {}
+	#last_get_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%m:%S")
+	#sql = '''select * from CenterApi where album_id in (4951470)'''
+	sql = '''select * from CenterApi where album_id in (%s)''' % (ids_str.rstrip(","))
+	#sql = '''select * from CenterApi where ctif_scheduled_release_time in ("201811130000","201811131000","201811131100") limit %s''' % (limit)
+	cnt = cur.execute(sql)
+	if cnt > 0:
+		rets = cur.fetchall()
+		for ret in rets:
+			if album_dict.has_key(ret["album_id"]):
+				album_dict[ret["album_id"]][ret["track_id"]] = ret
+			else:
+				album_dict[ret["album_id"]] = {}
+				album_dict[ret["album_id"]][ret["track_id"]] = ret
+			#if album_dict.has_key(ret["album_id"]):
+			#	album_dict[ret["album_id"]].append(ret)
+			#else:
+			#	album_dict[ret["album_id"]] = []
+			#	album_dict[ret["album_id"]].append(ret)
+		conn.commit()
+	return album_dict
+
+def get_release_date_recently(last_get_time,conn,cur,limit):
+	album_dict = {}
+	#last_get_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%m:%S")
+	sql = '''select * from CenterApi where ctime>"%s" limit %s''' % (last_get_time,limit)
+	cnt = cur.execute(sql)
+	if cnt > 0:
+		rets = cur.fetchall()
+		for ret in rets:
+			album_info = get_new_album(ret["album_id"],conn,cur)
+			if len(album_info) == 0:
+				continue
+			inter_days = 10
+			if album_info.has_key("release_time"):
+				if album_info["release_time"][0:10] != "0000-00-00":
+					inter_days = calTime(datetime.datetime.now().strftime("%Y-%m-%d"),album_info["release_time"][0:10])
+			if inter_days < 7:
+				if album_dict.has_key(ret["album_id"]):
+					album_dict[ret["album_id"]][ret["track_id"]] = ret
+				else:
+					album_dict[ret["album_id"]] = {}
+					album_dict[ret["album_id"]][ret["track_id"]] = ret
+			#if album_dict.has_key(ret["album_id"]):
+			#	album_dict[ret["album_id"]].append(ret)
+			#else:
+			#	album_dict[ret["album_id"]] = []
+			#	album_dict[ret["album_id"]].append(ret)
 	
 		conn.commit()
 	return album_dict
+
 
 def get_frommid_MusicSrc(tm_id,albumname,artists,connSrc,curSrc):
 	from_id = 0
@@ -76,32 +146,59 @@ def checkSrcAlbum(tx_albumid,conn,cur):
 
 def checkSrcMusic(mid,conn,cur):
 	aid = 0
-	sql = '''select id from MusicSrc where mid=%s''' % (mid)
+	m_status = 0
+	sql = '''select id,m_status from MusicSrc where mid=%s''' % (mid)
 	cnt = cur.execute(sql)
 	if cnt > 0:
 		ret = cur.fetchone()
 		aid = ret["id"]
-	return aid
+		m_status = ret["m_status"]
+	return aid,m_status
 
 def insert_MusicSrc(config,from_aid,priority,info,connData,curData,connSrc,curSrc):
 	sql_fields = ""
 	sql_values = ""
+	c_show_type = 10
 	fields_map = config["MusicMap"]
 	for k,v in fields_map.items():
+		if v == "timing_online" and info.has_key(k) and len(info[k])==12:
+			sql_fields += "%s," % v
+			time_arr = time.strptime(info[k],"%Y%m%d%H%M")
+			time_str = time.strftime("%Y-%m-%d %H:%M:00",time_arr)
+			sql_values += "\"%s\"," % MySQLdb.escape_string(str(time_str))
+			c_show_type = 0
+			continue
+		elif v == "timing_online":
+			continue
 		sql_fields += "%s," % v
 		sql_values += "\"%s\"," % MySQLdb.escape_string(str(info[k]))
 	for k,v in config["MusicConst"].items():
 		sql_fields += "%s," % k
-		sql_values += "%s," % v
+		if k == "c_show_type":
+			sql_values += "%s," % c_show_type
+		elif k == "priority":
+			sql_values += "%s," % 9
+		else:
+			sql_values += "%s," % v
 	sql_fields += "%s," % ("from_aid")
 	sql_values += "%s," % (from_aid)
 	sql_fields += "%s," % ("source_type")
 	sql_values += "%s," % (1)
+	pay_flag = 0x0;
+	if info.has_key("ctif_is_pay") and int(info["ctif_is_pay"]) == 1:
+		pay_flag = pay_flag | 0x1
+	if info.has_key("ctif_is_month_pay") and int(info["ctif_is_month_pay"]) == 1:
+		pay_flag = pay_flag | (0x1 << 1)
+	if info.has_key("ctif_is_cache_pay") and int(info["ctif_is_cache_pay"]) == 1:
+		pay_flag = pay_flag | (0x1 << 2)
 	#url,file_type = get_resource_url(1,info["track_id"],connData,curData)
 	#sql_fields += "%s," % "m_audio_url"
 	#sql_values += "\"%s\"," % url
-	sql_fields += "%s," % "priority"
-	sql_values += "%s," % priority
+	sql_fields += "%s," % "pay_flag"
+	sql_values += "%s," % pay_flag
+	if not config["MusicConst"].has_key("priority"):
+		sql_fields += "%s," % "priority"
+		sql_values += "%s," % priority
 	sql = '''insert into `MusicSrc` (%s) values (%s)''' % (sql_fields.rstrip(","), sql_values.rstrip(","))
 	logging.info(sql)
 	cnt = curSrc.execute(sql)
@@ -147,6 +244,7 @@ def get_resource_url(type,sourceid,connData,curData):
 		url = ret["url"]
 	return url,file_type
 	
+
 ###info:[{album_id,album_name,singer_name,track_ids,desc,language,upc,company,album_type,release_time},{}]
 def insert_AlbumSrc(album_id,artistTop,config,connData,curData,connSrc,curSrc):
 	from_aid = 0
@@ -175,17 +273,16 @@ def insert_AlbumSrc(album_id,artistTop,config,connData,curData,connSrc,curSrc):
 		sql_fields += "%s," % k
 		if k == "priority":
 			if inter_days <=7 and top_art:
-				sql_values += "%s," % 10
+				#sql_values += "%s," % 10
 				priority = 10
 			elif inter_days <=30 and top_art:
-				sql_values += "%s," % 9
+				#sql_values += "%s," % 9
 				priority = 9
 			elif top_art:
 				priority = 8
 			elif inter_days <=30:
 				priority = 7
-			else:
-				sql_values += "%s," % priority
+			sql_values += "%s," % 9
 		else:
 			sql_values += "%s," % v
 
@@ -230,32 +327,63 @@ def data_get_pool(config,connData,curData,connSrc,curSrc,album_dict,limit):
 		#print album_id
 		if len(infos) == 0:
 			continue
-		if checkAlbumPay(infos[0]["track_id"],connData,curData) == 7:
-			continue
-		from_aid,priority = checkSrcAlbum(album_id,connSrc,curSrc)
-		if from_aid > 0:
-			###3.album exists, insert music
+		#is_digit_album = False
+		#for track_id,info in infos.items():
+		#	if checkAlbumPay(track_id,connData,curData) == 7:
+		#		is_digit_album = True
+		#		break
+		#if is_digit_album:
+		#	continue
+		if int(album_id) > 0:
+			from_aid,priority = checkSrcAlbum(album_id,connSrc,curSrc)
+			if priority == 0:
+				priority = 6
+			if from_aid > 0:
+				###3.album exists, insert music
+				for track_id,info in infos.items():
+					mid,m_status = checkSrcMusic(info["track_id"],connSrc,curSrc)
+					if mid > 0 and m_status == 9:
+						logging.info("mid : %s exists" % (info["track_id"]))
+						logging.info("mid : %s update" % (info["track_id"]))
+						update_MusicSrc(config,info["track_id"],info,connData,curData,connSrc,curSrc)
+						continue
+					elif mid > 0:
+						logging.info("mid : %s exists" % (info["track_id"]))
+						continue
+					insert_MusicSrc(config,from_aid,priority,info,connData,curData,connSrc,curSrc)
+			else:
+				###3.insert album, insert music
+				#album_info = get_new_album(album_id,connData,curData)
+				from_aid,priority = insert_AlbumSrc(album_id,artistTop,config,connData,curData,connSrc,curSrc)
+				if from_aid == -1:
+					logging.info("no album info %s" % (album_id))
+					continue
+				for track_id,info in infos.items():
+					mid,m_status = checkSrcMusic(info["track_id"],connSrc,curSrc)
+					if mid > 0 and m_status == 9:
+						logging.info("mid : %s exists" % (info["track_id"]))
+						logging.info("mid : %s update" % (info["track_id"]))
+						update_MusicSrc(config,info["track_id"],info,connData,curData,connSrc,curSrc)
+						continue
+					elif mid > 0:
+						logging.info("mid : %s exists" % (info["track_id"]))
+						continue
+					insert_MusicSrc(config,from_aid,priority,info,connData,curData,connSrc,curSrc)
+		else:
+			from_aid = 0
+			priority = 6
 			for track_id,info in infos.items():
-				if checkSrcMusic(info["track_id"],connSrc,curSrc) > 0:
+				mid,m_status = checkSrcMusic(info["track_id"],connSrc,curSrc)
+				if mid > 0 and m_status == 9:
 					logging.info("mid : %s exists" % (info["track_id"]))
 					logging.info("mid : %s update" % (info["track_id"]))
 					update_MusicSrc(config,info["track_id"],info,connData,curData,connSrc,curSrc)
 					continue
-				insert_MusicSrc(config,from_aid,priority,info,connData,curData,connSrc,curSrc)
-		else:
-			###3.insert album, insert music
-			#album_info = get_new_album(album_id,connData,curData)
-			from_aid,priority = insert_AlbumSrc(album_id,artistTop,config,connData,curData,connSrc,curSrc)
-			if from_aid == -1:
-				logging.info("no album info %s" % (album_id))
-				continue
-			for track_id,info in infos.items():
-				if checkSrcMusic(info["track_id"],connSrc,curSrc) > 0:
+				elif mid > 0:
 					logging.info("mid : %s exists" % (info["track_id"]))
-					update_MusicSrc(config,info["track_id"],info,connData,curData,connSrc,curSrc)
 					continue
 				insert_MusicSrc(config,from_aid,priority,info,connData,curData,connSrc,curSrc)
-		break
+		#break
 		#logging.info("sleep 180s")
 		#time.sleep(180)
 
@@ -268,14 +396,19 @@ if __name__ == '__main__':
 		g_curSrc = g_connSrc.cursor()
 
 		last_get_time1 = (datetime.datetime.now()-datetime.timedelta(seconds=-180)).strftime("%Y-%m-%d %H:%m:%S")
-		album_dict = get_new_album_track(last_get_time,g_connData,g_curData,200000)
-		logging.info("last-get-time:%s" % (last_get_time))
+		#album_dict = get_new_album_track(last_get_time,g_connData,g_curData,200000)
+		logging.info("begin last-get-time:%s" % (last_get_time))
+		logging.info("next last-get-time:%s" % (last_get_time1))
+		#album_dict = get_release_date_recently(last_get_time,g_connData,g_curData,200000)
+		album_dict = get_new_album_track_file(sys.argv[1],g_connData,g_curData,200000)
+		logging.info("end last-get-time:%s" % (last_get_time))
 		last_get_time = last_get_time1
 		data_get_pool(g_config.configinfo,g_connData,g_curData,g_connSrc,g_curSrc,album_dict,200000)
-		logging.info("sleep 180s")
-		time.sleep(180)
+		#logging.info("sleep 180s")
+		#time.sleep(180)
 		
 		g_curData.close()
 		g_connData.close()
 		g_curSrc.close()
 		g_connSrc.close()
+		break

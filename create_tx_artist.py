@@ -72,7 +72,7 @@ def new_add_album(art,cur,conn,fw):
 
         post_json = json.dumps(post_dict)
         dlog.debug(post_json)
-
+	#'''
         f = urllib2.urlopen(
                 url     = 'http://centerserver.kuwo.cn/add_task',
                 data    = post_json
@@ -80,6 +80,7 @@ def new_add_album(art,cur,conn,fw):
         result = f.read()
         js_ret = json.loads(result)
         dlog.debug(result)
+	#'''
         task_id = 0
         if result.find("OK") >= 0:
            task_id = js_ret["taskid"]
@@ -157,7 +158,8 @@ def get_artist_dms_id(cur,artist):
 	art_id = 0
 	name = MySQLdb.escape_string(artist) 
 	try:
-		sql = '''select id from Artist where name = "%s" ''' % name
+		#sql = '''select id from DMSRuntime.Artist where m_name = "%s" ''' % name
+		sql = '''select id from DMSRuntime.Artist where m_name = "%s" or m_name1="%s" or m_name2="%s" or m_name3="%s" or m_name4="%s" or m_name5="%s"''' % (name,name,name,name,name,name)
 		cnt = cur.execute(sql)
 		if cnt > 0:
 			ret = cur.fetchone()
@@ -212,18 +214,18 @@ def get_num_task_running(conn,cur):
 if __name__ == "__main__":
     try:
         limit = 100
-        conn    = MySQLdb.connect(host="192.168.73.111",user="dmsbatch",passwd="dmsbatch",db="Res",charset='utf8',port=3306)
-        connRes = MySQLdb.connect(host="60.28.216.86",user="create",passwd="yeelion",db="Resource",charset='utf8',port=3306)
+        #conn    = MySQLdb.connect(host="192.168.73.111",user="dmsbatch",passwd="dmsbatch",db="Res",charset='utf8',port=3306)
+        #connRes = MySQLdb.connect(host="192.168.73.111",user="autodms",passwd="yeelion",db="Resource",charset='utf8',port=13306)
         #connRun = MySQLdb.connect(host="60.28.199.25",user="hanxin",passwd="lI52pq8a",db="DMSTask",charset='utf8',port=3306)
-        connRun = MySQLdb.connect(host="175.102.178.39",user="autodms",passwd="yeelion",db="DMSTask",charset='utf8',port=3306)
-        cur     = conn.cursor()
-        curRes  = connRes.cursor()
+        connRun = MySQLdb.connect(host="10.0.23.5",user="autodms",passwd="yeelion",db="DMSTask",charset='utf8',port=3306)
+        #cur     = conn.cursor()
+        #curRes  = connRes.cursor()
 	curRun = connRun.cursor()
         f = open("artist/artist.create." + sys.argv[1],"r")
         fw = open("artist/artist.create.ret." + sys.argv[1],"ab+")
         f_art = open("artist/artist.create.artistid." + sys.argv[1],"w")	
-        artist_set = get_create_artist_info(f,curRes,f_art)
-        artist_worker(curRes,connRes,artist_set,fw)
+        artist_set = get_create_artist_info(f,curRun,f_art)
+        artist_worker(curRun,connRun,artist_set,fw)
 	###check whether task is over
 	count = get_num_task_running(connRun,curRun)
 	while count > 0:
@@ -231,13 +233,13 @@ if __name__ == "__main__":
 		dlog.info("wait task over. sleep 10s")
 		count = get_num_task_running(connRun,curRun)
 
-        cur.close()
-        conn.close()
+        #cur.close()
+        #conn.close()
         f.close()
         fw.close()
         f_art.close()
-        curRes.close()
-        connRes.close()
+        #curRes.close()
+        #connRes.close()
 	curRun.close()
 	connRun.close()
     except Exception, e:

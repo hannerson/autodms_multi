@@ -1,6 +1,8 @@
+#!/usr/local/bin/python2.7
 # -*- coding=utf-8 -*-
 
 import os,sys
+#sys.path.append("/usr/local/lib/python2.7/")
 import MySQLdb
 import utils
 import MySQLdb.cursors
@@ -18,6 +20,8 @@ g_pool_Src = PooledDB(MySQLdb,7,host=g_sqlConfig["src_dbhost"],user=g_sqlConfig[
 g_pool_Res = PooledDB(MySQLdb,5,host=g_sqlConfig["res_dbhost"],user=g_sqlConfig["res_dbuser"],passwd=g_sqlConfig["res_dbpwd"],db=g_sqlConfig["res_dbname"],charset=g_sqlConfig["res_dbcharset"],port=g_sqlConfig["res_dbport"])
 g_pool_Run = PooledDB(MySQLdb,5,host=g_sqlConfig["task_dbhost"],user=g_sqlConfig["task_dbuser"],passwd=g_sqlConfig["task_dbpwd"],db=g_sqlConfig["task_dbname"],charset=g_sqlConfig["task_dbcharset"],port=g_sqlConfig["task_dbport"])
 g_pool_TMApi = PooledDB(MySQLdb,5,host=g_sqlConfig["TMApi_dbhost"],user=g_sqlConfig["TMApi_dbuser"],passwd=g_sqlConfig["TMApi_dbpwd"],db=g_sqlConfig["TMApi_dbname"],charset=g_sqlConfig["TMApi_dbcharset"],port=g_sqlConfig["TMApi_dbport"],cursorclass=MySQLdb.cursors.DictCursor)
+g_pool_Relation = PooledDB(MySQLdb,5,host=g_sqlConfig["relation_dbhost"],user=g_sqlConfig["relation_dbuser"],passwd=g_sqlConfig["relation_dbpwd"],db=g_sqlConfig["relation_dbname"],charset=g_sqlConfig["relation_dbcharset"],port=g_sqlConfig["relation_dbport"])
+g_pool_Pay = PooledDB(MySQLdb,5,host=g_sqlConfig["pay_dbhost"],user=g_sqlConfig["pay_dbuser"],passwd=g_sqlConfig["pay_dbpwd"],db=g_sqlConfig["pay_dbname"],charset=g_sqlConfig["pay_dbcharset"],port=int(g_sqlConfig["pay_dbport"]))
 
-g_status = {"default":0,"dispatch":1,"sig_ok":2,"artist_ok":3,"task_send":4,"artist_no":5,"task_fail":6,"task_suc":7,"sig_fail":8,"retry_fail":9,"has_matched":10,"editor_album":11}
+g_status = {"default":0,"dispatch":1,"sig_ok":2,"artist_ok":3,"task_send":4,"artist_no":5,"task_fail":6,"task_suc":7,"sig_fail":8,"retry_fail":9,"has_matched":10,"editor_album":11,"match_first":12,"relation_more":13,"already_in":14,"wrong_info":15,"highrisk":16}
 

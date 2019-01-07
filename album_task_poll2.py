@@ -188,7 +188,8 @@ def update_albumId_poll():
 	#break
 
 if __name__ == "__main__":
-	update_albumId_poll()
+	update_music_albumId_poll()
+	#update_albumId_poll()
 g_curSrc.close()
 g_connSrc.close()
 g_curRes.close()

@@ -9,11 +9,11 @@ reload(sys)
 sys.setdefaultencoding('utf-8')
 
 
-class dispatcher(object):
+class dispatcher_match(object):
 	def __init__(self,config,logging):
 		self.config = config
 		self.logging = logging
-		self.q_data = Queue.Queue(20)
+		self.q_data = Queue.Queue(2000)
 		#self.taskprocessor = task
 		self.has_data = True
 		self.data_lock = threading.Lock()
@@ -64,8 +64,37 @@ class dispatcher(object):
 			self.has_data = False
 			pass
 
+	def match_task(self,type,tableSrc,relaTable,checkInDMS,ret_sql,connSrc,curSrc,connRun,curRun,connRes,curRes):
+		try:
+			taskprocessor = Task(self.config,connRun,curRun,connRes,curRes)
+			src_sql_class = sqlClass(connSrc,curSrc)
+			for info in ret_sql:
+				ret  = taskprocessor.checkDMSExists(connSrc,curSrc,info,type,tableSrc,relaTable)
+				#print ret
+				#print info
+				if ret == False:
+					if type == "Music":
+						field_dict = {}
+						field_dict["m_status"] = g_status["match_first"]
+						where = "id=%s" % (info["id"])
+						src_sql_class.mysqlUpdate(tableSrc,where,field_dict)
+						update_MusicSrc_try_count(info["id"],connSrc,curSrc)
+					elif type == "Album":
+						field_dict = {}
+						field_dict["m_status"] = g_status["match_first"]
+						where = "id=%s" % (info["id"])
+						src_sql_class.mysqlUpdate(tableSrc,where,field_dict)
+				elif ret == True:
+					logging.info("id %s, mid %s matched" % (info["id"],info["mid"]))
+		except Exception,e:
+			self.logging.error(str(e))
+			self.data_lock.acquire()
+			self.has_data = False
+			self.data_lock.release()
+			pass
+
 	def thread_worker(self,type,tableSrc,relaTable,checkInDMS,i):
-		while self.has_data or not self.q_data.empty():
+		while self.has_data :
 			self.logging.info("g_has_data : %s" % (self.has_data))
 			ret_sql = []
 			if self.q_data.empty():
@@ -90,7 +119,7 @@ class dispatcher(object):
 				connRes = g_pool_Res.connection()
 				curRes = connRes.cursor()
 
-				self.send_task(type,tableSrc,relaTable,checkInDMS,ret_sql,connSrc,curSrc,connRun,curRun,connRes,curRes)
+				self.match_task(type,tableSrc,relaTable,checkInDMS,ret_sql,connSrc,curSrc,connRun,curRun,connRes,curRes)
 
 				curSrc.close()
 				connSrc.close()
@@ -149,12 +178,15 @@ class dispatcher(object):
 
 		tsk_status = set()
 		if type == "Album":
-			tsk_status.add(g_status["default"])
-			tsk_status.add(g_status["task_fail"])
+			#tsk_status.add(g_status["default"])
+			tsk_status.add(g_status["highrisk"])
+			#tsk_status.add(g_status["task_fail"])
 		elif type == "Music":
-			tsk_status.add(g_status["sig_ok"])
-			tsk_status.add(g_status["task_fail"])
-			tsk_status.add(g_status["editor_album"])
+			#tsk_status.add(g_status["default"])
+			tsk_status.add(g_status["highrisk"])
+			#tsk_status.add(g_status["sig_ok"])
+			#tsk_status.add(g_status["task_fail"])
+			#tsk_status.add(g_status["editor_album"])
 
 		sql_status = ""
 		for s in tsk_status:
@@ -167,11 +199,12 @@ class dispatcher(object):
 			sql_fields += "%s," % (v)
 		#print sql_fields
 		if table == "AlbumSrc":
-			sql = '''select %s from %s where m_status in (%s) and m_status_art=%s order by priority limit %s''' % (sql_fields.rstrip(","), table, sql_status.rstrip(","), g_status["artist_ok"], limit)
+			#sql = '''select %s from %s where m_status in (%s) and m_status_art=%s order by priority limit %s''' % (sql_fields.rstrip(","), table, sql_status.rstrip(","), g_status["artist_ok"], limit)
+			sql = '''select %s from %s where m_status in (%s) order by priority limit %s''' % (sql_fields.rstrip(","), table, sql_status.rstrip(","), limit)
 		elif table == "MusicSrc":
-			sql = '''select %s from %s where m_status in (%s) and m_status_art=%s and m_artists!="" and m_name!="" and batch_name="zhuanjipipei.20181212" and file_sig1>0 order by priority desc limit %s''' % (sql_fields.rstrip(","), table, "11, 10 ", g_status["artist_ok"],limit)
+			#sql = '''select %s from %s where m_status in (%s) and m_status_art=%s and m_artists!="" and m_name!="" and (m_album_id > 0 or from_aid="0") order by priority desc limit %s''' % (sql_fields.rstrip(","), table, sql_status.rstrip(","), g_status["artist_ok"],limit)
+			sql = '''select %s from %s where m_status in (%s) and m_artists!="" and m_name!="" and (m_album_id > 0 or from_aid="0" or from_aid="-1") order by priority desc limit %s''' % (sql_fields.rstrip(","), table, sql_status.rstrip(","), limit)
 		self.logging.info(sql)
-		self.logging.info("xxxxxxxxxxxxxxxxxxxxxxxxx")
 
 		cnt = cur.execute(sql)
 		conn.commit()
@@ -186,7 +219,7 @@ class dispatcher(object):
 
 	def create_workers(self,type,tableSrc,relaTable,checkInDMS):
 		config_info = self.config.configinfo
-		thread_num = 3
+		thread_num = 1
 		if config_info.has_key("common") and config_info["common"].has_key("thread_num"):
 			thread_num = int(config_info["common"]["thread_num"])
 		for i in range(thread_num):
@@ -201,35 +234,32 @@ class dispatcher(object):
 		editor_id = self.config.configinfo["common"]["editor_id"]
 		task_sum = 0
 		if type == "Album":
-			count_sql = 'select count(*) from %s where m_status in (0,6) and m_status_art=3' % table
+			count_sql = 'select count(*) from %s where m_status in (16)' % table
 		elif type == "Music":
-			count_sql = 'select count(*) from %s where  m_status_art=3 and batch_name="zhuanjipipei.20181212" ' % table
+			count_sql = 'select count(*) from %s where m_status in (16)' % table
 		count = self.check_music_count(count_sql,connSrc,curSrc)
 		#while True:
 		while count > 0:
-			print "start loop"
 			self.get_data2(type,connSrc,curSrc,table,limit,numbyone)
-			while not self.q_data.empty():
+			while (not self.q_data.empty()):
+				if self.has_data == False:
+					break
 				time.sleep(2)
 				self.logging.info("sleep 2s")
 			time.sleep(10)
-			task_sum += 1
-			if task_sum % 10 == 0:
-				task_count = get_num_task_running(editor_id, connRun, curRun)
-				while task_count > tasklimit:
-					self.logging.info("task count %s sleep 10s" % (task_count))
-					time.sleep(10)
-					task_count = get_num_task_running(editor_id, connRun, curRun)
 			count = self.check_music_count(count_sql,connSrc,curSrc)
 			if count == 0:
-				self.logging.info("sleep 60s")
-				time.sleep(60)
-			break
+				self.logging.info("sleep 10s")
+				time.sleep(10)
+			if self.has_data == False:
+				self.logging.info("error exit")
+				break
+			#break
 		self.has_data = False
 		curSrc.close()
 		connSrc.close()
 		curRun.close()
 		connRun.close()
 
-		self.logging.info("no match task no match task")
+		self.logging.info("no match task")
 

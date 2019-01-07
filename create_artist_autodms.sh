@@ -4,9 +4,20 @@ echo $workdir
 
 cd $workdir
 
+echo "current work direcory: $workdir"
+
+ps_out=`ps -ef | grep -v "xiaoshuo" | grep "create_tx_artist.py" | grep -v 'grep'`
+result=$(echo $ps_out | grep "create_tx_artist.py")
+if [[ "$result" != "" ]];then
+     echo "create_artist_autodms is running"
+     exit 1
+else
+     echo "create_artist_autodms is not running"
+fi
 cur_date=`date +%Y%m%d%H%m`
-mysql -h192.168.253.161 -uautodms -pyeelion -P 3306 -A AutoDMS -Ne"set names utf8;select m_artists,id from AlbumSrc where m_status in (0,2) and m_status_art=0 and m_artists!=\"\"" > artist/artist.album.$cur_date
-mysql -h192.168.253.161 -uautodms -pyeelion -P 3306 -A AutoDMS -Ne"set names utf8;select m_artists,id from MusicSrc where m_status in (0,2) and m_status_art=0 and m_artists!=\"\"" > artist/artist.music.$cur_date
+mysql -h10.0.29.8 -uautodms -pyeelion -P 3306 -A AutoDMS -Ne"set names utf8;select m_artists,id from AlbumSrc where m_status in (0,2) and m_status_art=0 and m_artists!=\"\"" > artist/artist.album.$cur_date
+mysql -h10.0.29.8 -uautodms -pyeelion -P 3306 -A AutoDMS -Ne"set names utf8;select m_artists,id from AlbumSrc where m_status=6 and m_artists!=\"\"" >> artist/artist.album.$cur_date
+mysql -h10.0.29.8 -uautodms -pyeelion -P 3306 -A AutoDMS -Ne"set names utf8;select m_artists,id from MusicSrc where m_status in (0,2) and m_status_art=0 and m_artists!=\"\"" > artist/artist.music.$cur_date
 
 cat artist/artist.album.$cur_date artist/artist.music.$cur_date > artist/artist.$cur_date
 

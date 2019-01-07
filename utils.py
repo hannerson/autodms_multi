@@ -9,10 +9,12 @@ import time,datetime
 import MySQLdb
 import traceback
 import urllib2
+import urllib
+import re
 from PIL import Image
 from logger import *
 
-g_status = {"default":0,"dispatch":1,"sig_ok":2,"artist_ok":3,"task_send":4,"artist_no":5,"task_fail":6,"task_suc":7,"sig_fail":8,"retry_fail":9,"has_matched":10,"editor_album":11}
+g_status = {"default":0,"dispatch":1,"sig_ok":2,"artist_ok":3,"task_send":4,"artist_no":5,"task_fail":6,"task_suc":7,"sig_fail":8,"retry_fail":9,"has_matched":10,"editor_album":11,"match_first":12}
 
 def artist_split(artists):
     artistset = set()
@@ -95,14 +97,15 @@ def checkTMApiStatus2(mid,conn,cur):
 
 def getTrimMsg(msg):
 	# 删除特殊字符
-	p1 = re.compile("[\(\)\[\] ,\.\{\}\- ]|（|）|【|】|。|　| |，|✅|～")
+	#p1 = re.compile("[\(\)\[\] ,\.\{\}\- ]|（|）|【|】|。|　| |，|✅|～")
 	# 删除特殊字符和括号中的内容
 	p2 = re.compile("\(.*?\)|\[.*?\]|（.*?）|【.*?】|\{.*?\}|《.*?》|『.*?』")
 	if p2.sub("", msg) == "":
-		msg = p1.sub("", msg)
+		#msg = p1.sub("", msg)
+		return msg
 	else:
 		msg = p2.sub("", msg)
-		msg = p1.sub("", msg)	
+		#msg = p1.sub("", msg)	
 	return msg
 
 def calTime(date1,date2):
@@ -124,6 +127,18 @@ def loadArtistTop(filename):
 		artistSet.add(arr[1].strip())
 	f.close()
 	return artistSet
+
+def checkOnline(type,tid,connRun,curRun):
+	c_show_type = -1
+	sql = '''select c_show_type from DMSRuntime.%s where id=%s''' % (type,tid)
+	cnt = curRun.execute(sql)
+	if cnt > 0:
+		ret = curRun.fetchone()
+		if int(ret[0]) == 0 or int(ret[0]) == 14:
+			c_show_type = 1
+		else:
+			c_show_type = 0
+	return c_show_type
 
 def update_MusicSrc_try_count(id,connSrc,curSrc):
 	sql = '''update MusicSrc set retry_count=retry_count+1 where id=%s''' % (id)
@@ -197,6 +212,58 @@ def getSig(filename):
 	output = os.popen(curdir + "/mkylnewsig \"%s\" " % (filename))
 	sig = output.read()
 	return sig
+
+def checkMusicMatch(albumname,musicname,artists,version,version2,onlyMusic):
+	try:
+		music_id = []
+		artists = artists.replace(" ","").lower()
+		if artists.find('###') != -1:
+			artistlist = artists.strip().split("###")
+		elif artists.find('/') != -1:
+			artistlist = artists.strip().split("/")
+		elif artists.find(';') != -1:
+			artistlist = artists.strip().split(";")
+		elif artists.find('|') != -1:
+			artistlist = artists.strip().split("|")
+		elif artists.find(',') != -1:
+			artistlist = artists.strip().split(",")
+		elif artists.find('、') != -1:
+			artistlist = artists.strip().split("、")
+		else:
+			artistlist = artists.strip().split("###")
+		artistlist.sort()
+		data = {}
+		data["song"] = musicname
+		data["id"] = ""
+		data["artist"] = ",".join(artistlist)
+		data["album"] = albumname
+		if version2 != "":
+			data["version"] = version2
+		else:
+			data["version"] = version
+		match_url = "http://101.36.137.21:8888/music_match?%s" % (urllib.urlencode(data))
+		print match_url
+		f = urllib2.urlopen(
+			url = match_url
+		)
+
+		result = f.read()
+		logging.info(str(result))
+		js_ret = json.loads(result)
+		if js_ret["status"] != "ok":
+			return music_id
+
+		if not js_ret.has_key("songs") or len(js_ret["songs"]) == 0:
+			return music_id
+
+		for song in js_ret["songs"]:
+			if song["same_song"] == 1 and song["same_artist"] == 1 and song["same_album"] == 1 and song["same_version"] == 1:
+				#if song["ar"] == "、".join(artistlist):
+				music_id.append(int(song["id"]))
+		return music_id
+	except Exception,e:
+		logging.error(str(e))
+		pass
 
 #取得文件的sig路径
 def ImageFileProcess(sig1, sig2, path_pre, filename):
@@ -382,7 +449,7 @@ def get_num_task_running(editor_id,conn,cur):
         return count
 
 def get_kw_albumid(curRes,tm_album,kw_artist):
-    kw_albumid = 0
+    kw_albumid = []
     try:
         album = MySQLdb.escape_string(tm_album)
         artist = MySQLdb.escape_string(kw_artist)
@@ -390,8 +457,9 @@ def get_kw_albumid(curRes,tm_album,kw_artist):
         cnt = curRes.execute(sql)
 	logging.info(sql)
         if cnt > 0:
-            ret = curRes.fetchone()
-            kw_albumid = ret[0]
+            rets = curRes.fetchall()
+	    for ret in rets:
+            	kw_albumid.append(ret[0])
     except:
         traceback.print_exc()
     return kw_albumid
@@ -437,10 +505,12 @@ def getArtistIdsFromName(artists,split,connRun,curRun,connSrc,curSrc):
         Ids = set()
 	art_arr = artists.strip().split(split)
 	for art in art_arr:
+		#artist = art.strip().replace("（","(").replace("）",")")
 		artist = art.strip()
+		#artist = getTrimMsg(artist)
 		#if len(artist) > 96:
 		#	artist = artist[:96]
-                sqlcmd = '''select id from Artist where c_show_type!=16 and (m_name=\"%s\" or m_name1=\"%s\" or m_name2=\"%s\" or m_name3=\"%s\" or m_name4=\"%s\" or m_name5=\"%s\") order by id''' % (MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist))
+                sqlcmd = '''select id from Artist where c_show_type !=16 and m_name=\"%s\" order by id''' % (MySQLdb.escape_string(artist))
                 cnt = curRun.execute(sqlcmd)
 		logging.info(sqlcmd)
                 if cnt > 0:
@@ -452,7 +522,46 @@ def getArtistIdsFromName(artists,split,connRun,curRun,connSrc,curSrc):
 					Ids.add(str(id))
 			else:
 				Ids.add(str(ret[0]))
+		else:
+			sqlcmd = '''select id from Artist where (m_name=\"%s\" or m_name1=\"%s\" or m_name2=\"%s\" or m_name3=\"%s\" or m_name4=\"%s\" or m_name5=\"%s\") order by id''' % (MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist))
+			cnt = curRun.execute(sqlcmd)
+			logging.info(sqlcmd)
+			if cnt > 0:
+				ret = curRun.fetchone()
+				#Ids.add(str(ret[0]))
+				mapid = getArtistIdMap(ret[0],connSrc,curSrc)
+				if len(mapid) > 0:
+					for id in mapid:
+						Ids.add(str(id))
+				else:
+					Ids.add(str(ret[0]))
         return list(Ids)
+
+def getArtistIdFromName(artist,connRun,curRun,connSrc,curSrc):
+	artistid = 0
+	artist = artist.strip()
+	sqlcmd = '''select id from Artist where c_show_type !=16 and m_name=\"%s\" order by id''' % (MySQLdb.escape_string(artist))
+	cnt = curRun.execute(sqlcmd)
+	logging.info(sqlcmd)
+	if cnt > 0:
+		ret = curRun.fetchone()
+		mapid = getArtistIdMap(ret[0],connSrc,curSrc)
+		if len(mapid) > 0:
+			artistid = mapid[0]
+		else:
+			artistid = ret[0]
+	else:
+		sqlcmd = '''select id from Artist where (m_name=\"%s\" or m_name1=\"%s\" or m_name2=\"%s\" or m_name3=\"%s\" or m_name4=\"%s\" or m_name5=\"%s\") order by id''' % (MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist),MySQLdb.escape_string(artist))
+		cnt = curRun.execute(sqlcmd)
+		logging.info(sqlcmd)
+		if cnt > 0:
+			ret = curRun.fetchone()
+			mapid = getArtistIdMap(ret[0],connSrc,curSrc)
+			if len(mapid) > 0:
+				artistid = mapid[0]
+			else:
+				artistid = ret[0]
+        return artistid
 
 ###get all albumids of the album name
 def getAlbumids(albumname,connRun,curRun):
@@ -469,6 +578,7 @@ def getAlbumids(albumname,connRun,curRun):
 
 def checkAlbumExists(albumname,artists,connRun,curRun,connRes,curRes):
     ###find album id
+    kw_ids = []
     ret_albumId = 0
     tx_albumid = ""
     logging.info("album match : %s, %s" % (albumname, artists))
@@ -476,7 +586,8 @@ def checkAlbumExists(albumname,artists,connRun,curRun,connRes,curRes):
     #print "albumids:",albumIds
     if len(albumIds) == 0:
         ###new album
-        return ret_albumId,tx_albumid
+	return kw_ids
+        #return ret_albumId,tx_albumid
     else:
         ###album artist new
         artistset = set()
@@ -496,8 +607,10 @@ def checkAlbumExists(albumname,artists,connRun,curRun,connRes,curRes):
         	artistlist = artists.strip().split("###")
         ###single artist
         if len(artistlist) <= 1:
-            nAlbumId = get_kw_albumid(curRes,albumname,artists)
-            return nAlbumId,tx_albumid
+            nAlbumIds = get_kw_albumid(curRes,albumname,artists)
+	    kw_ids = nAlbumIds
+	    return kw_ids
+            #return nAlbumId,tx_albumid
         for a in artistlist:
             artistset.add(a.strip().lower())
 
@@ -508,12 +621,13 @@ def checkAlbumExists(albumname,artists,connRun,curRun,connRes,curRes):
             artistNames = getNameSetfromArtistIds(artistIdset,connRun,curRun)
             if artistset == artistNames:
 		logging.info("matched : %s" % albumId)
-                return albumId,tx_albumid
-    return ret_albumId,tx_albumid
+		kw_ids.append(albumId)
+                #return albumId,tx_albumid
+    return kw_ids
 
 def getMusicIds(albumid,musicname,connRes,curRes):
 	ids = []
-        sqlcmd = '''select id,allartistid,artistid,version,version2 from Music where songname=\"%s\" and albumid=%s''' % (MySQLdb.escape_string(musicname.strip()),albumid)
+        sqlcmd = '''select id,allartistid,artistid,version,version2 from Music where albumid=%s and songname=\"%s\"''' % (albumid,MySQLdb.escape_string(musicname.strip()))
         #print sqlcmd
         cnt = curRes.execute(sqlcmd)
 	logging.info(sqlcmd)
@@ -611,17 +725,180 @@ def checkMusictm(tm_id,connRun,curRun):
 		return mid1
 	return 0
 
+def checkMusicRelation(tm_id,conn,cur):
+	kw_id = 0
+	replace_id = 0
+	sql = '''select rid from KT_MusicRelation where mid=%s''' % (tm_id)
+	cnt1 = cur.execute(sql)
+	logging.info(sql)
+	if cnt1 > 0:
+		ret = cur.fetchone()
+		kw_id= ret[0]
+	'''
+	if kw_id == 0:
+		sql = "select replace_id from KT_TencentRepeat where mid=%s" % (tm_id)
+		cnt1 = cur.execute(sql)
+		logging.info(sql)
+		if cnt1 > 0:
+			ret = cur.fetchone()
+			replace_id= ret[0]
+	if replace_id > 0:
+		sql = "select rid from KT_MusicRelation where mid=%s" % (replace_id)
+		cnt1 = cur.execute(sql)
+		logging.info(sql)
+		if cnt1 > 0:
+			ret = cur.fetchone()
+			kw_id= ret[0]
+	'''
+	return kw_id
+
+def checkMusicRelationKW(kw_id,conn,cur):
+	tm_id = 0
+	sql = '''select mid from KT_MusicRelation where rid=%s''' % (kw_id)
+	cnt1 = cur.execute(sql)
+	logging.info(sql)
+	if cnt1 > 0:
+		ret = cur.fetchone()
+		tm_id= ret[0]
+	return tm_id
+
+def insert_KWRelation(kw_id,tx_id,level,conn,cur):
+	try:
+		tm_id = checkMusicRelationKW(kw_id,conn,cur)
+		if tm_id == 0:
+			sql = '''insert into KT_MusicRelation (rid,mid,level,ctime) values (%s,%s,%s,now())''' % (kw_id,tx_id,level)
+			cnt = cur.execute(sql)
+			if cnt > 0:
+				conn.commit()
+				logging.info("insert relation (%s,%s)" % (kw_id,tx_id))
+			else:
+				logging.info("insert relation failed (%s,%s)" % (kw_id,tx_id))
+		return tm_id
+	except Exception,e:
+		logging.info(str(e))
+		pass
+		return 0
+
+def insert_TencentRepeat(tx_id,replace_id,conn,cur):
+	try:
+		sql = '''insert into KT_TencentRepeat (mid,replace_id,ctime) values (%s,%s,now())''' % (tx_id,replace_id)
+		cnt = cur.execute(sql)
+		if cnt > 0:
+			conn.commit()
+			logging.info("insert tencent repeat (%s,%s)" % (tx_id,replace_id))
+		else:
+			logging.info("insert tencent repeat failed (%s,%s)" % (tx_id,replace_id))
+	except Exception,e:
+		logging.info(str(e))
+		pass
+		return 0
+
+def checkAlbumRelation(tm_id,conn,cur):
+	kw_ids = []
+	replace_id = 0
+	sql = '''select kw_albumid from KT_AlbumRelation where qq_albumid=%s''' % (tm_id)
+	cnt1 = cur.execute(sql)
+	logging.info(sql)
+	if cnt1 > 0:
+		rets = cur.fetchall()
+		for ret in rets:
+			kw_ids.append(ret[0])
+	return kw_ids
+
+def checkAlbumRelationKW(kw_id,conn,cur):
+	qq_ids = []
+	replace_id = 0
+	sql = '''select qq_albumid from KT_AlbumRelation where kw_albumid=%s''' % (kw_id)
+	cnt1 = cur.execute(sql)
+	logging.info(sql)
+	if cnt1 > 0:
+		rets = cur.fetchall()
+		for ret in rets:
+			qq_ids.append(ret[0])
+	return qq_ids
+
+def insert_KWAlbumRelation(kw_id,tx_id,level,conn,cur):
+	try:
+		tm_ids = checkAlbumRelationKW(kw_id,conn,cur)
+		if len(tm_ids) == 0:
+			sql = '''insert into KT_AlbumRelation (kw_albumid,qq_albumid,level,ctime) values (%s,%s,%s,now())''' % (kw_id,tx_id,level)
+			cnt = cur.execute(sql)
+			if cnt > 0:
+				conn.commit()
+				logging.info("insert relation (%s,%s)" % (kw_id,tx_id))
+			else:
+				logging.info("insert relation failed (%s,%s)" % (kw_id,tx_id))
+		return tm_ids
+	except Exception,e:
+		logging.error(str(e))
+		pass
+		return 0
+
+def checkArtistRelation(tm_id,conn,cur):
+	kw_ids = []
+	sql = '''select kw_artistid from KT_ArtistRelation where qq_artistid=%s''' % (tm_id)
+	cnt = cur.execute(sql)
+	if cnt > 0:
+		rets = cur.fetchall()
+		for ret in rets:
+			kw_ids.append(ret[0])
+	return kw_ids
+
+def checkArtistRelationKW(kw_id,conn,cur):
+	qq_ids = []
+	sql = '''select qq_artistid from KT_ArtistRelation where kw_artistid=%s''' % (kw_id)
+	cnt = cur.execute(sql)
+	if cnt > 0:
+		rets = cur.fetchall()
+		for ret in rets:
+			qq_ids.append(ret[0])
+	return qq_ids
+
+def insert_KWArtistRelation(kw_id,tx_id,level,conn,cur):
+	try:
+		tm_ids = checkArtistRelationKW(kw_id,conn,cur)
+		if len(tm_ids) == 0:
+			sql = '''insert into KT_ArtistRelation (kw_artistid,qq_artistid,level,ctime) values (%s,%s,%s,now())''' % (kw_id,tx_id,level)
+			cnt = cur.execute(sql)
+			if cnt > 0:
+				conn.commit()
+				logging.info("insert relation (%s,%s)" % (kw_id,tx_id))
+			else:
+				logging.info("insert relation failed (%s,%s)" % (kw_id,tx_id))
+		return tm_ids
+	except Exception,e:
+		logging.error(str(e))
+		pass
+		return 0
+
+def get_kw_artists_tme(tme_singerids,split,conn,cur):
+        ids = []
+        names = []
+        art_arr = tme_singerids.strip().split(split)
+        for art in art_arr:
+                sql = '''select m_artist_id,m_name from ArtistSrc where tmeid=%s''' % art
+		logging.info(sql)
+                cnt = cur.execute(sql)
+                if cnt > 0:
+                        ret = cur.fetchone()
+                        conn.commit()
+                        if ret["m_artist_id"] == 0:
+                                continue
+                        ids.append(str(ret["m_artist_id"]))
+                        names.append(str(ret["m_name"]))
+        return ids,names
+
 def checkAlbumtm(tm_id,connRun,curRun):
 	mid1 = 0
 	mid2 = 0
-	sql = '''select id from Album where tx_albumid = \"tx_%s\" and version_editor != 1 and version_pub != 0 order by id''' % (tm_id)
+	sql = '''select id from Album where tx_albumid = \"tx_%s\" and version_editor != 1 order by id''' % (tm_id)
 	cnt1 = curRun.execute(sql)
 	logging.info(sql)
 	if cnt1 > 0:
 		ret = curRun.fetchone()
 		mid1 = ret[0]
 		return mid1,0
-	sql = '''select id from Album where tx_albumid = \"tm_%s\" and version_editor != 1 and version_pub != 0 order by id''' % (tm_id)
+	sql = '''select id from Album where tx_albumid = \"tm_%s\" and version_editor != 1 order by id''' % (tm_id)
 	cnt2 = curRun.execute(sql)
 	logging.info(sql)
 	if cnt2 > 0:
@@ -635,12 +912,14 @@ def checkEditorAlbum(albumid,connRun,curRun):
 		editor_ids = set([228,8,6,28,12,38,29,26,25,20,65,158,3,262,60,242,21,97])
 		aid = 0
 		is_editor = 0
-		sql = '''select tx_albumid from Album where id = %s''' % (albumid)
+		album_name = ""
+		sql = '''select tx_albumid,m_name from Album where id = %s''' % (albumid)
 		cnt = curRun.execute(sql)
 		logging.info(sql)
 		if cnt > 0:
 			ret = curRun.fetchone()
 			tx_albumid = ret[0].strip()
+			album_name = ret[1].strip()
 			if tx_albumid.find("tx_") != -1:
 				is_editor = 1
 				aid = int(tx_albumid.replace("tx_","").strip())
@@ -667,7 +946,7 @@ def checkEditorAlbum(albumid,connRun,curRun):
 					if editor_id in editor_ids:
 						is_editor = 1
 						break
-		return aid,is_editor
+		return aid,is_editor,album_name
 	except Exception,e:
 		logging.error(str(e))
 		#pass

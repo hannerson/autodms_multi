@@ -1,3 +1,4 @@
+#!/usr/local/bin/python
 # -*- coding=utf-8 -*-
 
 import os,sys
@@ -35,7 +36,7 @@ g_curTMApi = g_connTMApi.cursor()
 g_connPay = MySQLdb.connect(host=g_sqlConfig["pay_dbhost"],user=g_sqlConfig["pay_dbuser"],passwd=g_sqlConfig["pay_dbpwd"],db=g_sqlConfig["pay_dbname"],charset=g_sqlConfig["pay_dbcharset"],port=int(g_sqlConfig["pay_dbport"]))
 g_curPay = g_connPay.cursor()
 
-g_status = {"default":0,"dispatch":1,"sig_ok":2,"artist_ok":3,"task_send":4,"artist_no":5,"task_fail":6,"task_suc":7,"sig_fail":8}
+g_status = {"default":0,"dispatch":1,"sig_ok":2,"artist_ok":3,"task_send":4,"artist_no":5,"task_fail":6,"task_suc":7,"sig_fail":8,"retry_fail":9,"has_matched":10,"editor_album":11,"match_first":12}
 
 def initlog():
         logger = logging.getLogger()
@@ -163,10 +164,23 @@ def checkMusictmFail(tm_id,connRun,curRun):
 		return -1
 	return 0
 
+def get_realId_from_task(taskid,conn,cur):
+	table_id = 0
+	status = "none"
+	sql = '''select table_id,status from DMSTask.Action where task_id=%s and `table`="%s" limit 1''' % (taskid,"Music")
+	cnt = cur.execute(sql)
+	print sql
+	if cnt > 0:
+		ret = cur.fetchone()
+		table_id = ret[0]
+		status = ret[1]
+		conn.commit()
+	return table_id,status
+
 def checkMusicSrcSuc(conn, cur):
 	mids = set()
 	taskids = {}
-	sql = '''select mid,taskid,source_type,pay_flag from MusicSrc where m_status=%s and mid>0''' % (g_status["task_send"])
+	sql = '''select mid,taskid,source_type,pay_flag from MusicSrc where m_status=%s and mid>0 order by priority limit 10000''' % (g_status["task_send"])
 	cnt = cur.execute(sql)
 	if cnt > 0:
 		ret = cur.fetchall()
@@ -208,17 +222,16 @@ def update_musicId_poll():
 	while len(taskids) > 0:
 		taskComplete = set()
 		for taskid,mids in taskids.items():
-			status = get_task_status(taskid, g_connRun, g_curRun)
-			logging.info("%s status %s" % (taskid,status))
-			if status != "success" and status != "fail":
-				continue
 			for id,source_type,pay_flag in mids:
-				###check if id in dms
-				kuwo_id = checkMusictm(id, g_connRun, g_curRun)
-				if kuwo_id > 0:
+				kuwo_id,status = get_realId_from_task(taskid,g_connRun,g_curRun)
+				logging.info("process task %s" % (taskid))
+				logging.info("table_id: %s   status: %s" % (kuwo_id,status))
+				if status == "success":
 					logging.info("process mid: %s success" % (id))
 					###need update KWRelation
-					tm_other_id = utils.insert_KWRelation(kuwo_id,id,g_connRelation,g_curRelation)
+					tm_other_id = utils.insert_KWRelation(kuwo_id,id,301,g_connRelation,g_curRelation)
+					if tm_other_id > 0:
+						utils.insert_TencentRepeat(id,tm_other_id,g_connRelation,g_curRelation)
 					###update MusicSrc
 					fields = {"kw_id":kuwo_id,"m_status":g_status["task_suc"],"matched_other_mid":tm_other_id}
 					where = {"mid":id}
@@ -246,24 +259,15 @@ def update_musicId_poll():
 							notify_sync_request(1,id,1,kuwo_id,5)
 						sendTaskOnline(kuwo_id)
 						logging.info("online %s" % (kuwo_id))
-			for id,source_type,pay_flag in mids:
-				if id in taskComplete:
-					continue
-				###check if id in dms
-				kuwo_id = checkMusictmFail(id, g_connRun, g_curRun)
-				logging.info("kuwo id is %s" % (kuwo_id))
-				if kuwo_id > 0:
+				elif status == "fail":
 					logging.info("process mid: %s fail" % (id))
 					###update MusicSrc
 					fields = {"kw_id":kuwo_id,"m_status":g_status["task_fail"]}
 					where = {"mid":id}
 					update_MusicSrc(fields, where, g_connSrc, g_curSrc)
-				elif kuwo_id == -1:
 					logging.info("process mid: %s fail" % (id))
-					###update MusicSrc
-					fields = {"m_status":g_status["task_fail"]}
-					where = {"mid":id}
-					update_MusicSrc(fields, where, g_connSrc, g_curSrc)
+				else:
+					continue
 		break			
 		#taskids = checkMusicSrcSuc(g_connSrc,g_curSrc)
 		#logging.info("task nums %s" % (len(taskids)))

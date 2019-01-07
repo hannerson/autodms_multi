@@ -13,7 +13,7 @@ import datetime
 import urllib2
 from pooldb import *
 from logger import *
-from data_get_pool_utils import *
+from data_get_pool_utils2 import *
 import threading
 import Queue
 
@@ -37,7 +37,7 @@ if __name__ == '__main__':
 		print len(album_dict)
 		logging.info("end last-get-time:%s" % (last_get_time))
 		last_get_time = last_get_time1
-		data_get_pool_makeup(g_config.configinfo,10,g_connData,g_curData,g_connSrc,g_curSrc,album_dict,200000)
+		data_get_pool(g_config.configinfo,g_connData,g_curData,g_connSrc,g_curSrc,album_dict,200000)
 		#logging.info("sleep 180s")
 		#time.sleep(180)
 		

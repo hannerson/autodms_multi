@@ -22,28 +22,32 @@ reload(sys)
 sys.setdefaultencoding('utf-8')
 
 if __name__ == '__main__':
+	utime = 0
+	if os.path.exists("data_get_pool.utime"):
+		utime = int(getTimefile("data_get_pool.utime"))-3600
+	else:
+		utime = int(time.time()-3600)
+	if utime == 0:
+		utime = int(time.time()-3600)
+
 	while True:
 		g_connData = g_pool_TMApi.connection()
 		g_curData = g_connData.cursor()
 		g_connSrc = g_pool_Src.connection()
 		g_curSrc = g_connSrc.cursor()
 
-		begin_last_get_time = (datetime.datetime.now()-datetime.timedelta(seconds=-30)).strftime("%Y-%m-%d %H:%m:%S")
+		begin_last_get_time = (datetime.datetime.now()).strftime("%Y-%m-%d %H:%m:%S")
 		logging.info("begin get-time:%s" % (begin_last_get_time))
-		if os.path.exists("data_get_pool.time"):
-			last_get_time = getTimefile("data_get_pool.time")
-		else:
-			last_get_time = time.strftime("%Y-%m-%d %H:%M:%S",time.localtime(time.time()-3600))
-		if last_get_time == "":
-			last_get_time = time.strftime("%Y-%m-%d %H:%M:%S",time.localtime(time.time()-3600))
 
-		logging.info("last-get-time:%s" % (last_get_time))
-		album_dict = get_new_album_track(last_get_time,g_connData,g_curData,200000)
+		next_utime = int(time.time()-3600)
+
+		album_dict = get_new_album_track_utime(utime,g_connData,g_curData,200000)
 		end_last_get_time = datetime.datetime.now().strftime("%Y-%m-%d %H:%m:%S")
 		logging.info("end get-time:%s" % (end_last_get_time))
-		last_get_time = begin_last_get_time
 
-		createTimefile("data_get_pool.time",last_get_time)
+		createTimefile("data_get_pool.utime",next_utime)
+		utime = next_utime
+
 		data_get_pool(g_config.configinfo,g_connData,g_curData,g_connSrc,g_curSrc,album_dict,200000)
 		#break
 		logging.info("sleep 180s")

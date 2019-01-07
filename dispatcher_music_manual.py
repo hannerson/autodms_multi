@@ -14,4 +14,4 @@ if __name__ == '__main__':
 	#print g_config.configinfo
 	dispatcher_music = dispatcher(g_config,logging)
 	dispatcher_music.create_workers("Music","MusicSrc","MusicSrc",False)
-	dispatcher_music.dispatch("Music","MusicSrc",100,5,5000,g_pool_Src,g_pool_Run,g_pool_Res)
+	dispatcher_music.dispatch("Music","MusicSrc",100,1,5000,g_pool_Src,g_pool_Run,g_pool_Res)

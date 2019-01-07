@@ -169,9 +169,8 @@ class dispatcher(object):
 		if table == "AlbumSrc":
 			sql = '''select %s from %s where m_status in (%s) and m_status_art=%s order by priority limit %s''' % (sql_fields.rstrip(","), table, sql_status.rstrip(","), g_status["artist_ok"], limit)
 		elif table == "MusicSrc":
-			sql = '''select %s from %s where m_status in (%s) and m_status_art=%s and m_artists!="" and m_name!="" and batch_name="zhuanjipipei.20181212" and file_sig1>0 order by priority desc limit %s''' % (sql_fields.rstrip(","), table, "11, 10 ", g_status["artist_ok"],limit)
+			sql = '''select %s from %s where m_status in (%s) and m_status_art=%s and m_artists!="" and m_name!="" and batch_name="zhuanjipipei" and file_sig1>0 order by priority desc limit %s''' % (sql_fields.rstrip(","), table, "11", g_status["artist_ok"],limit)
 		self.logging.info(sql)
-		self.logging.info("xxxxxxxxxxxxxxxxxxxxxxxxx")
 
 		cnt = cur.execute(sql)
 		conn.commit()
@@ -203,11 +202,10 @@ class dispatcher(object):
 		if type == "Album":
 			count_sql = 'select count(*) from %s where m_status in (0,6) and m_status_art=3' % table
 		elif type == "Music":
-			count_sql = 'select count(*) from %s where  m_status_art=3 and batch_name="zhuanjipipei.20181212" ' % table
+			count_sql = 'select count(*) from %s where m_status in (11) and m_status_art=3 and batch_name="zhuanjipipei"' % table
 		count = self.check_music_count(count_sql,connSrc,curSrc)
 		#while True:
 		while count > 0:
-			print "start loop"
 			self.get_data2(type,connSrc,curSrc,table,limit,numbyone)
 			while not self.q_data.empty():
 				time.sleep(2)
@@ -224,12 +222,12 @@ class dispatcher(object):
 			if count == 0:
 				self.logging.info("sleep 60s")
 				time.sleep(60)
-			break
+			#break
 		self.has_data = False
 		curSrc.close()
 		connSrc.close()
 		curRun.close()
 		connRun.close()
 
-		self.logging.info("no match task no match task")
+		self.logging.info("no match task")
 

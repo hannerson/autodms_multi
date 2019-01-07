@@ -5,7 +5,7 @@ import traceback
 from pooldb import *
 from logger import *
 from taskProcessor import *
-from dispatcher import *
+from dispatcher2 import *
 
 reload(sys)
 sys.setdefaultencoding('utf-8')
@@ -13,5 +13,5 @@ sys.setdefaultencoding('utf-8')
 if __name__ == '__main__':
 	#print g_config.configinfo
 	dispatcher_music = dispatcher(g_config,logging)
-	dispatcher_music.create_workers("Music","MusicSrc","MusicSrc",True)
-	dispatcher_music.dispatch("Music","MusicSrc",1000,1,2000,g_pool_Src,g_pool_Run,g_pool_Res)
+	dispatcher_music.create_workers("Music","MusicSrc","MusicSrc",False)
+	dispatcher_music.dispatch("Music","MusicSrc",10,5,5000,g_pool_Src,g_pool_Run,g_pool_Res)

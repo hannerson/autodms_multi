@@ -56,22 +56,22 @@ def resource_request(tid,ctype):
 		#else:
 		#	return {}
 	except Exception,e:
-		#traceback.print_exc()
+		traceback.print_exc()
 		pass
 
 def notify_sync_request(act,rid,ctype,pid,status,code=0):
 	try:
 		if code == 0:
-			url = "http://103.235.253.210:8855/rsync2music/DataRsyncInterplace101.php?act=%s&rid=%s&rtype=%s&pid=%s&status=%s" % (act,rid,ctype,pid,status)
+			url = "http://vang.kuwo.cn/rsync2music/DataRsyncInterplace101.php?act=%s&rid=%s&rtype=%s&pid=%s&status=%s" % (act,rid,ctype,pid,status)
 		else:
-			url = "http://103.235.253.210:8855/rsync2music/DataRsyncInterplace101.php?act=%s&rid=%s&rtype=%s&pid=%s&status=%s&msg=%s" % (act,rid,ctype,pid,status,code)
-			
+			url = "http://vang.kuwo.cn/rsync2music/DataRsyncInterplace101.php?act=%s&rid=%s&rtype=%s&pid=%s&status=%s&msg=%s" % (act,rid,ctype,pid,status,code)
+		logging.info(url)	
 		f = urllib2.urlopen(
 			url = url
 			)
 
 		result = f.read()
-		print result
+		#print result
 		logging.info(str(result))
 		ret = json.loads(result)
 		return ret["code"]
@@ -81,5 +81,6 @@ def notify_sync_request(act,rid,ctype,pid,status,code=0):
 	
 
 if __name__ == "__main__":
-	resource_request(203360950,1)
-	#notify_sync_request(1,216985204,1,0,3)
+	resource_request(226944567,1)
+	#resource_request(10000004,2)
+	#notify_sync_request(1,219402003,1,0,3)

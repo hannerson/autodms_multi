@@ -453,7 +453,7 @@ class Task(object):
 				if len(kw_artistids) > 0:
 					kw_artistid = kw_artistids[0]
 				else:
-					kw_artistid = getArtistIdFromName(result["m_name"],self.connRun,self.curRun,connSrc,curSrc)
+					kw_artistid = getArtistIdFromName(result["m_name"],connSrc,curSrc)
 					insert_KWArtistRelation(kw_artistid,result["tmeid"],402,g_connRelation,g_curRelation)
 				g_curRelation.close()
 				g_connRelation.close()
@@ -463,7 +463,6 @@ class Task(object):
 					param["m_status"] = "%s" % g_status["has_matched"]
 					param["m_artist_id"] = "%s" % kw_artistid
 					src_sql_class.mysqlUpdate(tableSrc,where,param)
-					logging.info("Artist matched tmeid-%s kwid-%s" % (result["tmeid"],kw_artistid))
 					matched = True
 			return matched
 		except Exception,e:
@@ -523,17 +522,16 @@ class Task(object):
 			ids_task = set()
 			priority = 7
 			for info in info_arr:
-				print info
 				taskSingle = {}
 				c_show_type = 10
 				#print info
-				if (checkInDMS and self.checkDMSExists(connSrc,curSrc,info,task_type,tableSrc,relaTable)) or (info.has_key("new_request") and info["new_request"]==1):
+				if (checkInDMS and self.checkDMSExists(connSrc,curSrc,info,task_type,tableSrc,relaTable)) or info["new_request"]==1:
 					continue
 				if task_type == "Music" and info.has_key("m_album_id") and info["m_album_id"] > 0:
 					if not check_DMS_Album_status(info["m_album_id"],self.connRun,self.curRun):
 						continue
 				for k,v in config.items():
-					if k in ["file_size","file_sig1","file_sig2","file_path","file_type","c_extparams","file_format","sameids","new_request","tme_artist_ids"]:
+					if k in ["file_size","file_sig1","file_sig2","file_path","file_type","c_extparams","file_format","sameids","new_request"]:
 						continue
 					if k == "m_artists":###: split ';','###',',','&'
 						if config.has_key("m_artist_ids") and info[config["m_artist_ids"]].strip() != "":
@@ -667,17 +665,10 @@ class Task(object):
 						if int(info[v]) > 0:
 							taskSingle[k] = "tm_%s" % info[v]
 						continue
-					elif k == "tx_artistid":
-						if int(info[v]) > 0:
-							taskSingle[k] = "tm_%s" % info[v]
-						continue
 					elif k == "from_id":
 						if int(info[v]) > 0:
 							taskSingle[k] = "tm_%s" % info[v]
 						continue
-					elif k == "hf_type":
-						if int(info[v]) > 0:
-							c_show_type = 3
 					elif info.has_key(v) and info[v] != "None" and info[v] is not None:
 						taskSingle[k] = "%s" % info[v]
 				if task_type == "Music":
@@ -689,20 +680,12 @@ class Task(object):
 								taskSingle[k] = "%s" % v
 				if task_type == "Artist":
 					for k,v in self.config.configinfo["ArtistConst"].items():
-						if k in ["c_batch","c_show_type"]:
+						if k in ["c_batch","artisttype"]:
 							taskSingle[k] = "%s" % v
-							#if k == "c_show_type":
-							#	taskSingle[k] = "%s" % c_show_type
-							#else:
-							#	taskSingle[k] = "%s" % v
 				if task_type == "Album":
 					for k,v in self.config.configinfo["AlbumConst"].items():
 						if k in ["c_batch","c_show_type"]:
-							#taskSingle[k] = "%s" % v
-							if k == "c_show_type":
-								taskSingle[k] = "%s" % c_show_type
-							else:
-								taskSingle[k] = "%s" % v
+							taskSingle[k] = "%s" % v
 							#if k == "c_show_type":
 							#	taskSingle[k] = "%s" % c_show_type
 							#else:

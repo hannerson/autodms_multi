@@ -13,7 +13,7 @@ import string
 from PIL import Image
 import datetime
 import time
-from commonConfig import *
+#from commonConfig import *
 from sqlClass import *
 
 g_validFields = ["id","id2","m_name","m_aliasname","m_album_id","m_subalbum","m_track","m_audio_id","m_copyright","basic_version","basic_releasedate","basic_company","basic_intro","tags_category","tags_genre","tags_region","tags_lang","c_show_type","m_artists"]

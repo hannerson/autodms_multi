@@ -4,8 +4,8 @@ import MySQLdb
 import traceback
 from pooldb import *
 from logger import *
-from taskProcessor import *
-from dispatcher import *
+from taskProcessor_new import *
+from dispatcher_new import *
 
 reload(sys)
 sys.setdefaultencoding('utf-8')
