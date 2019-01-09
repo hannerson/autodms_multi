@@ -533,7 +533,7 @@ class Task(object):
 					if not check_DMS_Album_status(info["m_album_id"],self.connRun,self.curRun):
 						continue
 				for k,v in config.items():
-					if k in ["file_size","file_sig1","file_sig2","file_path","file_type","c_extparams","file_format","sameids","new_request","tme_artist_ids"]:
+					if k in ["file_size","file_sig1","file_sig2","file_path","file_type","c_extparams","file_format","sameids","new_request","tme_artist_ids","duration"]:
 						continue
 					if k == "m_artists":###: split ';','###',',','&'
 						if config.has_key("m_artist_ids") and info[config["m_artist_ids"]].strip() != "":
@@ -688,14 +688,18 @@ class Task(object):
 							else:
 								taskSingle[k] = "%s" % v
 				if task_type == "Artist":
+					if c_show_type == 10:
+						c_show_type = 0
 					for k,v in self.config.configinfo["ArtistConst"].items():
 						if k in ["c_batch","c_show_type"]:
-							taskSingle[k] = "%s" % v
-							#if k == "c_show_type":
-							#	taskSingle[k] = "%s" % c_show_type
-							#else:
-							#	taskSingle[k] = "%s" % v
+							#taskSingle[k] = "%s" % v
+							if k == "c_show_type":
+								taskSingle[k] = "%s" % c_show_type
+							else:
+								taskSingle[k] = "%s" % v
 				if task_type == "Album":
+					if c_show_type == 10:
+						c_show_type = 0
 					for k,v in self.config.configinfo["AlbumConst"].items():
 						if k in ["c_batch","c_show_type"]:
 							#taskSingle[k] = "%s" % v
